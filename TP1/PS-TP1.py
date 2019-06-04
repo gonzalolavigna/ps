@@ -10,6 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy.fftpack as sc
 from scipy import signal
+import scipy.stats
 
 #%%
 
@@ -91,10 +92,7 @@ a = coefficient[1].flatten()
 signal_filtered_hp = signal.filtfilt(b,a,signal_filtered_lp_2)
 
 plt.figure(4)
-low_slice  = 0
-high_slice = 160
 
-plt.plot(signal_filtered_lp_2[low_slice:high_slice])
 
 
 slice_1 = signal_filtered_lp_2[low_slice:high_slice]  - np.mean(signal_filtered_lp_2[low_slice:high_slice])
@@ -172,6 +170,134 @@ for i in range((bit_in_bytes*bytes_in_header)):
 
 
 #%%
+plt.close('all')
 
+
+def number_of_incorrect_bits(pattern_bits,decoded_bits):
+    return np.sum(np.abs(pattern_bits - decoded_bits))
+
+#Abrimos el archivo correspondiente al pulso
+pulse = np.load('pulse.npy')
+#Abrimos la señal con ruido
+signal_noise = np.load('signalLowSNR.npy')
+
+#signal_matched_filter_high = np.convolve(signal_noise[20:40],pulse,mode = 'same')
+#signal_matched_filter_low = np.convolve(signal_noise[20:40],-1*pulse, 'same')
+
+
+bit_array = np.array([1.0,0.0,1.0,0.0,1.0,1.0,0.0,0.0,1.0,0.0,1.0,0.0,1.0,1.0,0.0,0.0,1.0,0.0,1.0,0.0,1.0,1.0,0.0,0.0,1.0,0.0,1.0,0.0,1.0,1.0,0.0,0.0,1.0,0.0,1.0,0.0,1.0,1.0,0.0,0.0,1.0,0.0,1.0,0.0,1.0,1.0,0.0,0.0,1.0,0.0,1.0,0.0,1.0,1.0,0.0,0.0,1.0,0.0,1.0,0.0,1.0,1.0,0.0,0.0,1.0,0.0,1.0,0.0,1.0,1.0,0.0,0.0,1.0,0.0,1.0,0.0,1.0,1.0,0.0,0.0,1.0,0.0,1.0,0.0,1.0,1.0,0.0,0.0,1.0,0.0,1.0,0.0,1.0,1.0,0.0,0.0,1.0,0.0,1.0,0.0,1.0,1.0,0.0,0.0,1.0,0.0,1.0,0.0,1.0,1.0,0.0,0.0,1.0,0.0,1.0,0.0,1.0,1.0,0.0,0.0,1.0,0.0,1.0,0.0,1.0,1.0,0.0,0.0])
+
+bit_samples  = 20
+bit_in_bytes = 8
+bytes_in_header = 16
+
+
+signal_matched_filter_high = signal.filtfilt(np.flip(pulse),1,signal_noise)
+
+#plt.plot(signal_matched_filter_high[0:160])
+#plt.plot(signal_matched_filter_high[20:40])
+
+offset = 1
+low_slice  = 0
+high_slice = 0 
+
+bit_array_matched_filter = np.array([])
+
+for i in range((bit_in_bytes*bytes_in_header)):
+    low_slice = i*20;
+    high_slice = (i+1)*20
+    vector_slice = signal_matched_filter_high[low_slice : high_slice] - np.mean(signal_matched_filter_high[low_slice : high_slice])
+    #bit_array = np.concatenate((bit_array,threshold_level_decision(vector_slice,offset)),axis=0)
+    bit_array_matched_filter=np.append(bit_array_matched_filter,threshold_level_decision(vector_slice,offset))
+
+print("Cantidad de bits incorrectos metodo muestreo unico:{}".format(number_of_incorrect_bits(bit_array,bit_array_matched_filter)))   
+
+sub_sampling=signal_matched_filter_high[1:(128*20):20]
+
+sub_sampling_ones  = sub_sampling[bit_array == 1]
+sub_sampling_zeros = sub_sampling[bit_array == 0]
+
+plt.title('HISTOGRAMA ZEROS')
+plt.hist(sub_sampling_zeros, bins = 10)
+plt.grid(True)
+
+plt.figure()
+plt.title('HISTOGRAMA UNOS')
+plt.hist(sub_sampling_ones, bins = 10)
+plt.grid(True)
+
+
+
+#%%
+
+plt.close('all')
+
+signal_noise = np.load('signal.npy')
+
+
+signal_matched_filter_high = signal.filtfilt(np.flip(pulse),1,signal_noise)
+bit_array_matched_filter = np.array([])
+
+
+offset = 1
+
+sub_sampling=signal_matched_filter_high[offset:(128*20):20]
+
+sub_sampling_ones  = sub_sampling[bit_array == 1]
+sub_sampling_zeros = sub_sampling[bit_array == 0]
+
+
+mean_ones   = np.mean(sub_sampling_ones) 
+std_ones    = np.std(sub_sampling_ones) 
+mean_zeros  = np.mean(sub_sampling_zeros)
+std_zeros   = np.std(sub_sampling_zeros)
+
+normal_ones=scipy.stats.norm(mean_ones, std_ones)
+normal_zeros=scipy.stats.norm(mean_zeros, std_zeros)
+
+
+x = np.linspace(0,3,200)
+y_ones_pdf  = normal_ones.pdf(x)
+y_zeros_pdf = normal_zeros.pdf(x)
+
+y_ones_cdf  = normal_ones.cdf(x)
+y_zeros_cdf = normal_zeros.cdf(x)
+
+plt.title('HISTOGRAMA ZEROS')
+plt.hist(sub_sampling_zeros, bins = 10,normed=1, cumulative=False)
+plt.plot(x,y_zeros_pdf,'r')
+plt.plot(x,y_zeros_cdf,'k')
+plt.grid(True)
+
+#plt.figure()
+plt.title('HISTOGRAMA UNOS')
+plt.hist(sub_sampling_ones, bins = 10,normed=1, cumulative=False)
+plt.plot(x,y_ones_pdf,'r')
+plt.plot(x,1-y_ones_cdf,'k')
+plt.grid(True)
+
+plt.figure()
+threshold_1= np.where(np.abs((1-y_ones_cdf)-y_zeros_cdf) == np.amin(np.abs((1-y_ones_cdf)-y_zeros_cdf)))
+
+
+threshold = (np.mean(sub_sampling_ones) + np.mean(sub_sampling_zeros))/2
+
+
+signal_matched_filter_high -= x[threshold_1[0][0]] 
+#signal_matched_filter_high -= np.mean(signal_noise)
+for i in range((bit_in_bytes*bytes_in_header)):
+    low_slice = i*20;
+    high_slice = (i+1)*20
+    vector_slice = signal_matched_filter_high[low_slice : high_slice] #- np.mean(signal_matched_filter_high[low_slice : high_slice])
+    #bit_array = np.concatenate((bit_array,threshold_level_decision(vector_slice,offset)),axis=0)
+    bit_array_matched_filter=np.append(bit_array_matched_filter,threshold_level_decision(vector_slice,offset))
+
+print("Cantidad de bits incorrectos metodo muestreo unico:{}".format(number_of_incorrect_bits(bit_array,bit_array_matched_filter)))   
+
+
+
+
+
+#%%
 
 
