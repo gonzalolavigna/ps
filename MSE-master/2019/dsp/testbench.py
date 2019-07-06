@@ -149,6 +149,61 @@ plt.show()
 #CROSS_CORR = BH@d_desired_slice
 #W = inv(AUTO_CORR)@CROSS_CORR 
 
-        
-    
+#%%
+plt.close('all')
+def align_samples_predictor(samples_vector,ncoeffs):
+    #De tener 20 muestras y 4 Coeficientes del filtro, las columnas de AH son 17
+    columns = np.size(samples_vector) - ncoeffs
+    rows    = ncoeffs
+    AH     = np.zeros((rows,columns))
+    for i in np.arange(columns):
+        AH[:,i] =samples_vector[np.arange(ncoeffs+i-1,-1+i,-1)]
+    return AH    
+
+def wiener_coeffs(AH,D):
+    AUTO_CORR   = AH@AH.transpose()
+    CROSS_CORR  = AH@D
+    W           = inv(AUTO_CORR)@CROSS_CORR  
+    return W
+
+def minimum_mse(AH,D):
+    DH = D.transpose()
+    A =  AH.transpose()
+    emin = DH@D - DH@A@inv(AH@A)@AH@D
+    return emin
+
+#Parametros de la señal
+sigma   = 0.5
+ncoeffs = 100
+f0      = 50 
+fs      = 1000
+ts      = 1/fs
+t_max   = 5
+N  = t_max*fs
+
+#
+tt              = np.linspace(0,t_max,N,endpoint = False)
+d_desired       = np.sin(2*f0*np.pi*tt + np.pi/2)
+d_desired_slice = d_desired [ncoeffs:]
+tt_slice        = tt[ncoeffs:]
+
+input_vector = d_desired + np.random.normal(0,sigma,np.size(d_desired))
+plt.figure()
+plt.plot(tt,d_desired)
+
+CH=align_samples_predictor(input_vector,ncoeffs)
+W =wiener_coeffs(CH,d_desired_slice)
+d_est = CH.transpose()@W
+e_min = minimum_mse(CH,d_desired_slice)
+print('E MINIMUM:{}'.format(e_min))
+
+plt.subplot(3,1,2)
+plt.title('SEÑAL DESEADA + RUIDO')
+plt.plot(tt[:300],input_vector[:300])
+plt.subplot(3,1,1)
+plt.title('SEÑAL DESEADA')
+plt.plot(tt[:300],d_desired[:300])
+plt.subplot(3,1,3)
+plt.title('SEÑAL FILTRADA')
+plt.plot(tt_slice[:300-ncoeffs],d_est[:300-ncoeffs])
 
